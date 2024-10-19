@@ -1,8 +1,9 @@
-import sha256 from 'crypto-js/sha256';
+import generator from 'generate-password';
 
 interface Env {
     baseAPI: string;
     token: string;
+    kv: KVNamespace;
 }
 
 interface TGjson {
@@ -25,31 +26,50 @@ export default {
         // 提取消息
         const text = tgjson.message.text;
 
+        const chatid = tgjson.message.chat.id;
+
         // 如果消息是 /start
         if (text === '/start') {
-            // 提取 chatid 准备 pushkey
-            const chatid = tgjson.message.chat.id;
-            const signature = sha256(chatid + env.token).toString();
+            // 准备 pushkey
+            const signature = generator.generate({ length: 43, numbers: true });
             const pushkey = chatid + ':' + signature;
-            const send = `你的 pushkey 是\n\`${pushkey}\`\n\npushkey 暂时被设计成通过 chatid 计算得到的，因此即使泄漏也*无法停用*\n请妥善保管\n\n不过如果真的有人泄漏了应该会改成可以停用的`;
+            const send = `你的 pushkey 是\n\`${pushkey}\`\n\n请妥善保管，不要泄露给他人\n如果泄漏请再次发送 /start 撤销旧 pushkey 并重新生成\n如果想停用请发送 /stop`;
 
-            const payload = {
-                parse_mode: 'MarkdownV2',
-                chat_id: chatid,
-                text: send,
-            };
-            const init = {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-            };
             // 发送消息
-            await fetch(API, init);
+            const sendPromise = sendMsg(API, send, chatid);
+
+            // 保存 pushkey
+            await env.kv.put(chatid, JSON.stringify({ 'sign': signature, 'time': 0 }));
+            await sendPromise;
+            return new Response(null);
         }
 
-        // 结束
+        if (text === '/stop') {
+            const send = `你的 pushkey 已停用\n如果想重新生成请发送 /start`;
+            const sendPromise = sendMsg(API, send, chatid);
+            await env.kv.delete(chatid);
+            await sendPromise;
+            return new Response(null);
+        }
+
+        const send = `无效命令\n发送 /start 生成 pushkey\n发送 /stop 停用 pushkey`;
+        await sendMsg(API, send, chatid);
         return new Response(null);
     },
 };
+
+async function sendMsg(API: string, message: string, chatid: string) {
+    const payload = {
+        parse_mode: 'MarkdownV2',
+        chat_id: chatid,
+        text: message,
+    };
+    const init = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    };
+    return fetch(API, init);
+}
