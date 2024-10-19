@@ -31,9 +31,10 @@ export default {
             const chatid = tgjson.message.chat.id;
             const signature = sha256(chatid + env.token).toString();
             const pushkey = chatid + ':' + signature;
-            const send = `你的 pushkey 是 ${pushkey}\npushkey 暂时被设计成通过 chatid 计算得到的，因此即使泄漏也**无法停用**\n请妥善保管\n\n不过如果真的有人泄漏了应该会改成可以停用的`;
+            const send = `你的 pushkey 是\n${pushkey}\n\npushkey 暂时被设计成通过 chatid 计算得到的，因此即使泄漏也**无法停用**\n请妥善保管\n\n不过如果真的有人泄漏了应该会改成可以停用的`;
 
             const payload = {
+                parse_mode: 'MarkdownV2',
                 chat_id: chatid,
                 text: send,
             };
